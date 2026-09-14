@@ -52,8 +52,52 @@ def _top_media(c, ig: str, start: date, end: date, product: str, limit: int = 5)
            GROUP BY m.id ORDER BY reach DESC NULLS LAST LIMIT %s""",
         (ig, product, start, end, limit),
     ).fetchall()
-    return [{"id": r[0], "permalink": r[1], "date": r[2].date().isoformat(), "caption": (r[3] or "")[:120],
+    return [{"id": r[0], "permalink": r[1], "date": r[2].date().isoformat(),
+             "caption": (r[3] or "")[:300], "caption_short": (r[3] or "")[:120],
+             "image": f"/img/ig:{r[0]}",
              "reach": r[4], "views": r[5], "interactions": r[6]} for r in rows]
+
+
+RESULT_ACTIONS = ("lead", "onsite_conversion.lead_grouped", "onsite_conversion.messaging_conversation_started_7d")
+
+
+def _top_ads(c, act: str, start: date, end: date, limit: int = 5) -> list[dict[str, Any]]:
+    """Top anúncios do período por resultados (leads + conversas), depois cliques no link."""
+    from collector.ads import creative_image_url, creative_text
+
+    rows = c.execute(
+        """WITH agg AS (
+             SELECT d.object_id, SUM(d.spend) spend, SUM(d.impressions) impressions, SUM(d.reach) reach,
+                    SUM(d.link_clicks) link_clicks,
+                    COALESCE(SUM((SELECT SUM((a->>'value')::numeric) FROM jsonb_array_elements(d.actions) a
+                                  WHERE a->>'action_type' = ANY(%s))), 0) results
+             FROM meta.ads_daily d
+             WHERE d.ad_account_id=%s AND d.level='ad' AND d.breakdown='' AND d.day BETWEEN %s AND %s
+             GROUP BY d.object_id)
+           SELECT g.object_id, o.name, o.status, o.creative, s.name adset, p.name campaign,
+                  g.spend, g.impressions, g.reach, g.link_clicks, g.results
+           FROM agg g LEFT JOIN meta.ad_object o ON o.id=g.object_id
+                LEFT JOIN meta.ad_object s ON s.id=o.parent_id
+                LEFT JOIN meta.ad_object p ON p.id=s.parent_id
+           ORDER BY g.results DESC, g.link_clicks DESC NULLS LAST, g.impressions DESC LIMIT %s""",
+        (list(RESULT_ACTIONS), act, start, end, limit),
+    ).fetchall()
+    out = []
+    for ad_id, name, status_, cr, adset, camp, spend, impr, reach, link, results in rows:
+        cr = cr or {}
+        title, body = creative_text(cr)
+        spend, impr, link, results = float(spend or 0), float(impr or 0), float(link or 0), float(results or 0)
+        out.append({
+            "id": ad_id, "name": name, "status": status_, "adset": adset, "campaign": camp,
+            "title": title, "body": (body or "")[:300],
+            "image": f"/img/ad:{ad_id}" if creative_image_url(cr) else None,
+            "permalink": cr.get("instagram_permalink_url"),
+            "spend": spend, "impressions": impr, "reach": float(reach or 0), "link_clicks": link,
+            "results": results,
+            "ctr": (link / impr * 100) if impr else None,
+            "cost_per_result": (spend / results) if results else None,
+        })
+    return out
 
 
 def _ads(c, act: str, start: date, end: date) -> dict[str, Any]:
@@ -99,6 +143,7 @@ def _ads(c, act: str, start: date, end: date) -> dict[str, Any]:
                        "link_clicks": float(lc or 0)} for n, s, sp, im, lc in camps],
         "by_platform": [{"platform": p.replace("publisher_platform=", ""), "spend": float(sp or 0),
                          "impressions": float(im or 0), "link_clicks": float(lc or 0)} for p, sp, im, lc in plat],
+        "top_ads": _top_ads(c, act, start, end),
         "spend_series": [{"day": d.isoformat(), "value": float(v or 0)} for d, v in c.execute(
             "SELECT day, SUM(spend) FROM meta.ads_daily WHERE ad_account_id=%s AND level='campaign' AND breakdown='' AND day BETWEEN %s AND %s GROUP BY day ORDER BY day",
             (act, start, end)).fetchall()],

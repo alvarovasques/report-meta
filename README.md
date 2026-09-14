@@ -25,10 +25,11 @@ Dashboard local: `REPORT_BASIC_PASSWORD=x uvicorn web.app:app --reload` e abra h
 | `collector/instagram.py` | Conta (views, reach, interações, follows), demografia, mídias (feed/reels, lifetime, re-coleta 30 dias), stories (diário, obrigatório) |
 | `collector/page.py` | Página (métricas pós-jun/2026, tolerante a deprecação) e posts |
 | `collector/ads.py` | Objetos (campanha/conjunto/anúncio) e insights por dia × nível × breakdown (plataforma, dispositivo, idade/gênero, hora) |
+| `collector/images.py` | Cache de thumbnails (posts, reels, criativos) em `meta.image_cache`; as URLs da CDN da Meta expiram |
 | `collector/db.py` | Upserts idempotentes; todo fato guarda o JSON bruto em `raw` |
-| `collector/sql/001_schema.sql` | Esquema `meta.*` (empacotado com o coletor; `migrate` aplica em ordem) |
+| `collector/sql/*.sql` | Esquema `meta.*` (empacotado com o coletor; `migrate` aplica em ordem; 002 = criativos + cache de imagens) |
 | `collector/cli.py` | `migrate`, `check`, `collect`, `backfill`, `daemon` (modo serviço) |
-| `web/app.py` | FastAPI: `/healthz`, `/api/report?start&end` (JSON), `/` dashboard (Basic Auth) |
+| `web/app.py` | FastAPI: `/healthz`, `/api/report?start&end` (JSON), `/img/{key}` thumbnails, `/` dashboard (Basic Auth) |
 | `web/report.py` | Agregações do relatório com comparação ao período anterior |
 | `stack.yml` | Stack do Swarm (db + web + collector) com labels Traefik e Watchtower |
 

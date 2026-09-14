@@ -116,6 +116,10 @@ def upsert_ad_object(c: psycopg.Connection, ad_account_id: str, level: str, o: d
     )
 
 
+def set_ad_creative(c: psycopg.Connection, ad_id: str, creative: dict) -> None:
+    c.execute("UPDATE meta.ad_object SET creative = %s WHERE id = %s", (Jsonb(creative), ad_id))
+
+
 def insert_ads_daily(c: psycopg.Connection, ad_account_id: str, level: str, row: dict, breakdown_keys: list[str]) -> None:
     breakdown = "|".join(f"{k}={row.get(k)}" for k in breakdown_keys) if breakdown_keys else ""
     object_id = row.get(f"{level}_id")

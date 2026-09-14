@@ -9,7 +9,7 @@ from datetime import date
 
 import structlog
 
-from . import db
+from . import db, images
 from .config import settings
 from .graph import GraphClient
 
@@ -28,8 +28,30 @@ BREAKDOWN_SETS: dict[str, list[str]] = {
     "demo": ["age", "gender"],
     "hour": ["hourly_stats_aggregated_by_advertiser_time_zone"],
 }
+# criativo do anúncio: texto, título, imagem (image_url para imagem estática; thumbnail_url para vídeo)
+CREATIVE_FIELDS = "id,name,title,body,image_url,thumbnail_url,object_story_spec,asset_feed_spec,instagram_permalink_url,effective_object_story_id"
 LEVELS_BY_BREAKDOWN = {"": ["campaign", "adset", "ad"], "platform": ["campaign"], "device": ["campaign"],
                        "demo": ["campaign"], "hour": ["campaign"]}
+
+
+def creative_image_url(cr: dict) -> str | None:
+    return cr.get("image_url") or cr.get("thumbnail_url")
+
+
+def creative_text(cr: dict) -> tuple[str | None, str | None]:
+    """(título, texto) olhando creative direto, object_story_spec e asset_feed_spec (dinâmicos)."""
+    title, body = cr.get("title"), cr.get("body")
+    spec = cr.get("object_story_spec") or {}
+    for k in ("link_data", "video_data", "photo_data"):
+        d = spec.get(k) or {}
+        title = title or d.get("name") or d.get("title")
+        body = body or d.get("message") or d.get("caption")
+    afs = cr.get("asset_feed_spec") or {}
+    if not title and afs.get("titles"):
+        title = afs["titles"][0].get("text")
+    if not body and afs.get("bodies"):
+        body = afs["bodies"][0].get("text")
+    return title, body
 
 
 def collect_objects(g: GraphClient) -> int:
@@ -42,8 +64,12 @@ def collect_objects(g: GraphClient) -> int:
             db.upsert_ad_object(c, act, "campaign", camp, None); n += 1
         for aset in g.paginate(f"/{act}/adsets", fields="id,name,status,effective_status,campaign_id", limit=100):
             db.upsert_ad_object(c, act, "adset", aset, aset.get("campaign_id")); n += 1
-        for ad in g.paginate(f"/{act}/ads", fields="id,name,status,effective_status,adset_id", limit=100):
+        for ad in g.paginate(f"/{act}/ads", fields="id,name,status,effective_status,adset_id,campaign_id,"
+                             f"creative{{{CREATIVE_FIELDS}}}", thumbnail_width=600, thumbnail_height=600, limit=100):
             db.upsert_ad_object(c, act, "ad", ad, ad.get("adset_id")); n += 1
+            cr = ad.get("creative") or {}
+            db.set_ad_creative(c, ad["id"], cr)
+            images.cache(c, f"ad:{ad['id']}", creative_image_url(cr))
         c.commit()
     return n
 

@@ -22,13 +22,25 @@
   .charts{display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:12px}
   .foot{color:var(--muted);font-size:12px;margin-top:24px}
   a{color:var(--accent)}
+  .cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:12px}
+  .mcard{display:flex;flex-direction:column;background:var(--card);border:1px solid var(--line);border-radius:10px;overflow:hidden;color:var(--ink);text-decoration:none}
+  .thumb{position:relative;aspect-ratio:4/5;background:#0b1118 center/cover no-repeat}
+  .rank{position:absolute;top:8px;left:8px;background:rgba(0,0,0,.65);color:#fff;font-weight:700;font-size:12px;padding:2px 7px;border-radius:999px}
+  .meta{padding:10px 12px;display:flex;flex-direction:column;gap:6px}
+  .ttl{font-weight:600}
+  .cap{font-size:12.5px;line-height:1.35;display:-webkit-box;-webkit-line-clamp:4;-webkit-box-orient:vertical;overflow:hidden;white-space:pre-line}
+  .stats{display:flex;flex-wrap:wrap;gap:6px 12px;font-size:11.5px;color:var(--muted)}.stats b{color:var(--ink);font-variant-numeric:tabular-nums}
+  .date{font-size:11px;color:var(--muted)}
+  .empty{color:var(--muted);font-size:13px}
 </style>
 </head>
 <body>
+{% macro fmt(v) -%}{% if v is not defined or v is none %}–{% else %}{{ '{:,.0f}'.format(v).replace(',', '.') }}{% endif %}{%- endmacro %}
+{% macro brl(v) -%}{% if v is not defined or v is none %}–{% else %}R$ {{ '{:,.2f}'.format(v).replace(',', 'X').replace('.', ',').replace('X', '.') }}{% endif %}{%- endmacro %}
 {% macro kpi(label, cur, prev, fmt='int', invert=false) -%}
 <div class="card kpi"><div class="l">{{ label }}</div>
-  <div class="v">{% if cur is none %}–{% elif fmt=='brl' %}R$ {{ '{:,.2f}'.format(cur).replace(',', 'X').replace('.', ',').replace('X', '.') }}{% elif fmt=='pct' %}{{ '%.2f'|format(cur) }}%{% else %}{{ '{:,.0f}'.format(cur).replace(',', '.') }}{% endif %}</div>
-  {% if cur is not none and prev %}{% set d = (cur - prev) / prev * 100 %}
+  <div class="v">{% if cur is not defined or cur is none %}–{% elif fmt=='brl' %}R$ {{ '{:,.2f}'.format(cur).replace(',', 'X').replace('.', ',').replace('X', '.') }}{% elif fmt=='pct' %}{{ '%.2f'|format(cur) }}%{% else %}{{ '{:,.0f}'.format(cur).replace(',', '.') }}{% endif %}</div>
+  {% if cur is defined and cur is not none and prev %}{% set d = (cur - prev) / prev * 100 %}
   <div class="d {{ 'down' if (d < 0) != invert else 'up' }}">{{ '▲' if d >= 0 else '▼' }} {{ '%.1f'|format(d|abs) }}% vs. período anterior</div>
   {% else %}<div class="d flat">sem base de comparação</div>{% endif %}
 </div>
@@ -65,17 +77,25 @@
   <div class="card"><canvas id="reach"></canvas></div>
   <div class="card"><canvas id="spend"></canvas></div>
 </div>
-{% if r.instagram.top_posts or r.instagram.top_reels %}
-<div class="charts" style="margin-top:12px">
-  {% for title, items in [('Top posts', r.instagram.top_posts), ('Top reels', r.instagram.top_reels)] %}
-  <div class="card"><strong>{{ title }}</strong>
-    <table><tr><th>Data</th><th>Legenda</th><th class="n">Alcance</th><th class="n">Views</th><th class="n">Interações</th></tr>
-    {% for p in items %}<tr><td>{{ p.date }}</td><td><a href="{{ p.permalink }}" target="_blank" rel="noopener">{{ p.caption or p.id }}</a></td>
-      <td class="n">{{ p.reach or '–' }}</td><td class="n">{{ p.views or '–' }}</td><td class="n">{{ p.interactions or '–' }}</td></tr>{% endfor %}
-    </table></div>
-  {% endfor %}
+{% macro media_cards(items, kind) -%}
+<div class="cards">
+  {% for p in items %}
+  <a class="mcard" href="{{ p.permalink }}" target="_blank" rel="noopener">
+    <div class="thumb" style="background-image:url('{{ p.image }}')"><span class="rank">#{{ loop.index }}</span></div>
+    <div class="meta">
+      <div class="cap">{{ p.caption or '(sem legenda)' }}</div>
+      <div class="stats"><span><b>{{ fmt(p.reach) }}</b> alcance</span><span><b>{{ fmt(p.views) }}</b> views</span><span><b>{{ fmt(p.interactions) }}</b> interações</span></div>
+      <div class="date">{{ p.date }}</div>
+    </div>
+  </a>
+  {% else %}<div class="empty">Sem {{ kind }} no período.</div>{% endfor %}
 </div>
-{% endif %}
+{%- endmacro %}
+
+<h2>Top 5 posts</h2>
+{{ media_cards(r.instagram.top_posts, 'posts') }}
+<h2>Top 5 reels</h2>
+{{ media_cards(r.instagram.top_reels, 'reels') }}
 
 <h2>Facebook</h2>
 <div class="grid">
@@ -94,6 +114,20 @@
   {{ kpi('CPM', r.ads.cpm, r.ads_previous.cpm, 'brl', true) }}
   {{ kpi('Leads', r.ads.leads, r.ads_previous.leads) }}
   {{ kpi('Conversas iniciadas', r.ads.conversations, r.ads_previous.conversations) }}
+</div>
+<h2>Top 5 anúncios</h2>
+<div class="cards">
+  {% for a in r.ads.top_ads %}
+  <div class="mcard">
+    <div class="thumb" style="background-image:url('{{ a.image or '' }}')"><span class="rank">#{{ loop.index }}</span></div>
+    <div class="meta">
+      {% if a.title %}<div class="ttl">{{ a.title }}</div>{% endif %}
+      <div class="cap">{{ a.body or a.name or '(sem texto)' }}</div>
+      <div class="stats"><span><b>{{ fmt(a.results) }}</b> resultados</span><span><b>{{ brl(a.cost_per_result) }}</b> /resultado</span><span><b>{{ fmt(a.link_clicks) }}</b> cliques</span><span><b>{{ brl(a.spend) }}</b> investido</span></div>
+      <div class="date">{{ a.campaign or '' }}{% if a.adset %} · {{ a.adset }}{% endif %} · {{ a.name }}{% if a.permalink %} · <a href="{{ a.permalink }}" target="_blank" rel="noopener">ver no Instagram</a>{% endif %}</div>
+    </div>
+  </div>
+  {% else %}<div class="empty">Sem anúncios com entrega no período.</div>{% endfor %}
 </div>
 <div class="charts" style="margin-top:12px">
   <div class="card"><strong>Campanhas</strong>

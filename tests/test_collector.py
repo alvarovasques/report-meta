@@ -60,3 +60,36 @@ def test_ads_breakdown_key_and_link_clicks():
 def test_day_bounds_utc():
     since, until = instagram._day_bounds(date(2026, 9, 1))
     assert until - since == 86400
+
+
+def test_creative_text_falls_back_to_story_spec_and_asset_feed():
+    cr = {"object_story_spec": {"link_data": {"message": "Fibra 800 mega", "name": "Assine"}}}
+    assert ads.creative_text(cr) == ("Assine", "Fibra 800 mega")
+    cr = {"asset_feed_spec": {"bodies": [{"text": "corpo"}], "titles": [{"text": "titulo"}]}}
+    assert ads.creative_text(cr) == ("titulo", "corpo")
+    assert ads.creative_image_url({"thumbnail_url": "t", "image_url": "i"}) == "i"
+
+
+def test_image_url_prefers_thumbnail_for_video():
+    assert instagram._image_url({"media_url": "m", "thumbnail_url": "t"}) == "t"
+    assert instagram._image_url({"media_url": "m"}) == "m"
+
+
+def test_dashboard_renders_with_empty_report():
+    from datetime import date as _d
+    from jinja2 import Environment, FileSystemLoader
+    from pathlib import Path
+    env = Environment(loader=FileSystemLoader(str(Path(__file__).parent.parent / "web" / "templates")))
+    empty_ads = {"spend": 0, "impressions": 0, "reach": 0, "clicks": 0, "link_clicks": 0, "ctr": None, "cpc": None,
+                 "cpm": None, "leads": 0, "conversations": 0, "results": 0, "cost_per_result": None, "campaigns": [],
+                 "by_platform": [], "top_ads": [{"id": "1", "name": "ad", "status": "ACTIVE", "adset": "a", "campaign": "c",
+                 "title": "T", "body": "B", "image": "/img/ad:1", "permalink": None, "spend": 10.0, "impressions": 100.0,
+                 "reach": 90.0, "link_clicks": 5.0, "results": 2.0, "ctr": 5.0, "cost_per_result": 5.0}], "spend_series": []}
+    r = {"period": {"start": "2026-09-01", "end": "2026-09-13", "days": 13, "prev_start": "2026-08-19", "prev_end": "2026-08-31"},
+         "instagram": {"followers": None, "followers_prev": None, "followers_delta": None, "current": {}, "previous": {},
+                       "engagement_rate": None, "posts_by_type": {}, "reach_series": [],
+                       "top_posts": [{"id": "m1", "permalink": "#", "date": "2026-09-02", "caption": "legenda", "caption_short": "legenda",
+                                      "image": "/img/ig:m1", "reach": 10, "views": 20, "interactions": 3}], "top_reels": []},
+         "facebook": {"current": {}, "previous": {}, "followers": None}, "ads": empty_ads, "ads_previous": empty_ads, "last_collect": None}
+    html = env.get_template("dashboard.html").render(r=r)
+    assert "/img/ig:m1" in html and "/img/ad:1" in html and "Top 5 anúncios" in html and "Sem reels" in html

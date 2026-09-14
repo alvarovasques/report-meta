@@ -6,7 +6,7 @@ from datetime import date, timedelta
 from pathlib import Path
 
 from fastapi import Depends, FastAPI, HTTPException, Query, Request, status
-from fastapi.responses import HTMLResponse, JSONResponse
+from fastapi.responses import HTMLResponse, JSONResponse, Response
 from fastapi.security import HTTPBasic, HTTPBasicCredentials
 from fastapi.templating import Jinja2Templates
 
@@ -49,6 +49,19 @@ def healthz():
 def api_report(start: str | None = Query(None), end: str | None = Query(None), _: str = Depends(auth)):
     s, e = _period(start, end)
     return report_builder.build(s, e)
+
+
+@app.get("/img/{key}")
+def image(key: str, _: str = Depends(auth)):
+    """Thumbnail cacheado no banco (ig:<media_id> | ad:<ad_id>). As URLs da CDN da Meta expiram."""
+    from collector import images
+
+    with db.conn() as c:
+        found = images.get(c, key)
+    if not found:
+        raise HTTPException(404)
+    ctype, data = found
+    return Response(content=data, media_type=ctype, headers={"Cache-Control": "private, max-age=86400"})
 
 
 @app.get("/", response_class=HTMLResponse)

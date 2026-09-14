@@ -12,7 +12,7 @@ from typing import Any
 
 import structlog
 
-from . import db
+from . import db, images
 from .config import settings
 from .graph import GraphClient, GraphError
 
@@ -27,7 +27,12 @@ MEDIA_METRICS = {
     "REELS": ["views", "reach", "likes", "comments", "saved", "shares", "total_interactions", "ig_reels_avg_watch_time"],
     "STORY": ["views", "reach", "replies", "shares", "navigation", "total_interactions"],
 }
-MEDIA_FIELDS = "id,media_type,media_product_type,caption,permalink,timestamp,like_count,comments_count"
+MEDIA_FIELDS = "id,media_type,media_product_type,caption,permalink,timestamp,like_count,comments_count,media_url,thumbnail_url"
+
+
+def _image_url(m: dict) -> str | None:
+    """Vídeos/reels: thumbnail_url; imagens e carrosséis: media_url (capa)."""
+    return m.get("thumbnail_url") or m.get("media_url")
 DEMOGRAPHICS = ["follower_demographics", "reached_audience_demographics"]
 
 
@@ -125,6 +130,7 @@ def collect_media(g: GraphClient, day: date, lookback_days: int = 30, full_backf
         for m in g.paginate(f"/{ig}/media", fields=MEDIA_FIELDS, limit=50):
             ts = datetime.fromisoformat(m["timestamp"].replace("+0000", "+00:00"))
             db.upsert_ig_media(c, ig, m)
+            images.cache(c, f"ig:{m['id']}", _image_url(m))
             if full_backfill or ts >= cutoff:
                 metrics = _media_insights(g, m["id"], m.get("media_product_type", "FEED"))
                 metrics["like_count"] = m.get("like_count")
@@ -145,6 +151,7 @@ def collect_stories(g: GraphClient, day: date) -> int:
         for s in g.paginate(f"/{ig}/stories", fields=MEDIA_FIELDS):
             s.setdefault("media_product_type", "STORY")
             db.upsert_ig_media(c, ig, s)
+            images.cache(c, f"ig:{s['id']}", _image_url(s))
             metrics = _media_insights(g, s["id"], "STORY")
             db.insert_media_snapshot(c, s["id"], day.isoformat(), metrics)
             n += 1
