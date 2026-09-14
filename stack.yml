@@ -1,0 +1,82 @@
+# Docker Swarm stack "report" — deploy via Portainer (Stacks > Add > Repository ou Web editor)
+# ou: docker stack deploy -c stack.yml report
+# Variáveis: crie no Portainer (env vars da stack) ou exporte antes do deploy.
+version: "3.9"
+
+x-image: &image ghcr.io/alvarovasques/report-meta:latest
+x-env: &env
+  DATABASE_URL: postgresql://report:${REPORT_DB_PASSWORD}@report-db:5432/report_meta
+  META_GRAPH_VERSION: ${META_GRAPH_VERSION:-v24.0}
+  META_APP_ID: ${META_APP_ID}
+  META_APP_SECRET: ${META_APP_SECRET:-}
+  META_BUSINESS_ID: ${META_BUSINESS_ID}
+  META_PAGE_ID: ${META_PAGE_ID}
+  META_IG_USER_ID: ${META_IG_USER_ID}
+  META_AD_ACCOUNT_ID: ${META_AD_ACCOUNT_ID}
+  REPORT_TIMEZONE: America/Campo_Grande
+  ADS_ATTRIBUTION_WINDOWS: 7d_click,1d_view
+  REPORT_BASIC_USER: ${REPORT_BASIC_USER:-internetmais}
+  REPORT_BASIC_PASSWORD: ${REPORT_BASIC_PASSWORD}
+  TZ: America/Campo_Grande
+
+services:
+  report-db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: report
+      POSTGRES_PASSWORD: ${REPORT_DB_PASSWORD}
+      POSTGRES_DB: report_meta
+    volumes:
+      - report_pgdata:/var/lib/postgresql/data
+    networks: [report_internal]
+    deploy:
+      placement:
+        constraints: [node.role == manager]
+      restart_policy: { condition: on-failure }
+      labels:
+        com.centurylinklabs.watchtower.enable: "false"
+
+  report-web:
+    image: *image
+    environment:
+      <<: *env
+    secrets: [meta_system_user_token]
+    networks: [report_internal, traefik-public]
+    deploy:
+      replicas: 1
+      update_config: { order: start-first, failure_action: rollback }
+      restart_policy: { condition: on-failure }
+      labels:
+        com.centurylinklabs.watchtower.enable: "true"
+        traefik.enable: "true"
+        traefik.docker.network: traefik-public
+        traefik.http.routers.report.rule: Host(`report.di4e.com.br`)
+        traefik.http.routers.report.entrypoints: websecure
+        traefik.http.routers.report.tls.certresolver: letsencrypt
+        traefik.http.services.report.loadbalancer.server.port: "8000"
+
+  report-collector:
+    image: *image
+    environment:
+      <<: *env
+    secrets: [meta_system_user_token]
+    networks: [report_internal]
+    command: ["report-meta", "daemon"]
+    deploy:
+      replicas: 1
+      restart_policy: { condition: on-failure, delay: 60s }
+      labels:
+        com.centurylinklabs.watchtower.enable: "true"
+
+networks:
+  report_internal:
+    driver: overlay
+  traefik-public:
+    external: true
+
+volumes:
+  report_pgdata:
+
+secrets:
+  meta_system_user_token:
+    external: true

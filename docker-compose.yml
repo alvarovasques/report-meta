@@ -1,0 +1,29 @@
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: report
+      POSTGRES_PASSWORD: report
+      POSTGRES_DB: report_meta
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    ports:
+      - "5433:5432"
+
+  collector:
+    build: .
+    env_file: .env
+    environment:
+      DATABASE_URL: postgresql://report:report@db:5432/report_meta
+      TZ: America/Campo_Grande
+    depends_on: [db]
+    # roda uma vez por dia às 03h (fuso local); troque por cron do Swarm se preferir
+    command: >
+      sh -c "report-meta migrate &&
+             while true; do
+               report-meta collect;
+               sleep $$(( ( $$(date -d 'tomorrow 03:00' +%s) - $$(date +%s) ) ));
+             done"
+
+volumes:
+  pgdata:

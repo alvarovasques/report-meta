@@ -1,0 +1,121 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Report Meta · Internet Mais</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.4/chart.umd.min.js"></script>
+<style>
+  :root{--bg:#0f1720;--card:#16212c;--ink:#e6edf3;--muted:#8b9bab;--green:#2ecc71;--red:#ff6b6b;--accent:#3ddc84;--line:#243241}
+  *{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--ink);font:14px/1.45 system-ui,Segoe UI,Roboto,sans-serif;padding:20px 16px}
+  h1{font-size:20px;margin:0 0 4px}h2{font-size:15px;margin:24px 0 10px;color:var(--muted);text-transform:uppercase;letter-spacing:.06em}
+  .sub{color:var(--muted);margin-bottom:16px}
+  form{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin:12px 0 20px}
+  input,button{background:var(--card);color:var(--ink);border:1px solid var(--line);border-radius:6px;padding:6px 10px}
+  button{background:var(--accent);color:#04120a;border:0;font-weight:600;cursor:pointer}
+  .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:14px}
+  .kpi .l{color:var(--muted);font-size:12px}.kpi .v{font-size:24px;font-weight:700;margin:4px 0}.kpi .d{font-size:12px}
+  .up{color:var(--green)}.down{color:var(--red)}.flat{color:var(--muted)}
+  table{width:100%;border-collapse:collapse;font-size:13px}th,td{text-align:left;padding:8px 6px;border-bottom:1px solid var(--line)}th{color:var(--muted);font-weight:500}
+  td.n,th.n{text-align:right;font-variant-numeric:tabular-nums}
+  .charts{display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:12px}
+  .foot{color:var(--muted);font-size:12px;margin-top:24px}
+  a{color:var(--accent)}
+</style>
+</head>
+<body>
+{% macro kpi(label, cur, prev, fmt='int', invert=false) -%}
+<div class="card kpi"><div class="l">{{ label }}</div>
+  <div class="v">{% if cur is none %}–{% elif fmt=='brl' %}R$ {{ '{:,.2f}'.format(cur).replace(',', 'X').replace('.', ',').replace('X', '.') }}{% elif fmt=='pct' %}{{ '%.2f'|format(cur) }}%{% else %}{{ '{:,.0f}'.format(cur).replace(',', '.') }}{% endif %}</div>
+  {% if cur is not none and prev %}{% set d = (cur - prev) / prev * 100 %}
+  <div class="d {{ 'down' if (d < 0) != invert else 'up' }}">{{ '▲' if d >= 0 else '▼' }} {{ '%.1f'|format(d|abs) }}% vs. período anterior</div>
+  {% else %}<div class="d flat">sem base de comparação</div>{% endif %}
+</div>
+{%- endmacro %}
+
+<h1>Report Meta · Internet Mais</h1>
+<div class="sub">{{ r.period.start }} a {{ r.period.end }} ({{ r.period.days }} dias) · comparado com {{ r.period.prev_start }} a {{ r.period.prev_end }}{% if r.last_collect %} · última coleta {{ r.last_collect[:16].replace('T',' ') }}{% endif %}</div>
+<form method="get">
+  <label>De <input type="date" name="start" value="{{ r.period.start }}"></label>
+  <label>Até <input type="date" name="end" value="{{ r.period.end }}"></label>
+  <button type="submit">Atualizar</button>
+</form>
+
+<h2>Visão geral</h2>
+<div class="grid">
+  {{ kpi('Alcance orgânico (IG)', r.instagram.current.reach, r.instagram.previous.reach) }}
+  {{ kpi('Alcance pago', r.ads.reach, r.ads_previous.reach) }}
+  {{ kpi('Investimento em anúncios', r.ads.spend, r.ads_previous.spend, 'brl', true) }}
+  {{ kpi('Resultados (leads + conversas)', r.ads.results, r.ads_previous.results) }}
+  {{ kpi('Custo por resultado', r.ads.cost_per_result, r.ads_previous.cost_per_result, 'brl', true) }}
+  {{ kpi('Seguidores IG', r.instagram.followers, r.instagram.followers_prev) }}
+</div>
+
+<h2>Instagram</h2>
+<div class="grid">
+  {{ kpi('Visualizações', r.instagram.current.views, r.instagram.previous.views) }}
+  {{ kpi('Interações', r.instagram.current.total_interactions, r.instagram.previous.total_interactions) }}
+  {{ kpi('Taxa de engajamento', r.instagram.engagement_rate, none, 'pct') }}
+  {{ kpi('Visitas ao perfil', r.instagram.current.profile_views, r.instagram.previous.profile_views) }}
+  {{ kpi('Salvamentos', r.instagram.current.saves, r.instagram.previous.saves) }}
+  {{ kpi('Compartilhamentos', r.instagram.current.shares, r.instagram.previous.shares) }}
+</div>
+<div class="charts" style="margin-top:12px">
+  <div class="card"><canvas id="reach"></canvas></div>
+  <div class="card"><canvas id="spend"></canvas></div>
+</div>
+{% if r.instagram.top_posts or r.instagram.top_reels %}
+<div class="charts" style="margin-top:12px">
+  {% for title, items in [('Top posts', r.instagram.top_posts), ('Top reels', r.instagram.top_reels)] %}
+  <div class="card"><strong>{{ title }}</strong>
+    <table><tr><th>Data</th><th>Legenda</th><th class="n">Alcance</th><th class="n">Views</th><th class="n">Interações</th></tr>
+    {% for p in items %}<tr><td>{{ p.date }}</td><td><a href="{{ p.permalink }}" target="_blank" rel="noopener">{{ p.caption or p.id }}</a></td>
+      <td class="n">{{ p.reach or '–' }}</td><td class="n">{{ p.views or '–' }}</td><td class="n">{{ p.interactions or '–' }}</td></tr>{% endfor %}
+    </table></div>
+  {% endfor %}
+</div>
+{% endif %}
+
+<h2>Facebook</h2>
+<div class="grid">
+  {{ kpi('Seguidores', r.facebook.followers, none) }}
+  {{ kpi('Visualizações da página', r.facebook.current.page_views_total, r.facebook.previous.page_views_total) }}
+  {{ kpi('Engajamento em posts', r.facebook.current.page_post_engagements, r.facebook.previous.page_post_engagements) }}
+  {{ kpi('Novos seguidores', r.facebook.current.page_daily_follows_unique, r.facebook.previous.page_daily_follows_unique) }}
+</div>
+
+<h2>Meta Ads</h2>
+<div class="grid">
+  {{ kpi('Impressões', r.ads.impressions, r.ads_previous.impressions) }}
+  {{ kpi('Cliques no link', r.ads.link_clicks, r.ads_previous.link_clicks) }}
+  {{ kpi('CTR', r.ads.ctr, r.ads_previous.ctr, 'pct') }}
+  {{ kpi('CPC', r.ads.cpc, r.ads_previous.cpc, 'brl', true) }}
+  {{ kpi('CPM', r.ads.cpm, r.ads_previous.cpm, 'brl', true) }}
+  {{ kpi('Leads', r.ads.leads, r.ads_previous.leads) }}
+  {{ kpi('Conversas iniciadas', r.ads.conversations, r.ads_previous.conversations) }}
+</div>
+<div class="charts" style="margin-top:12px">
+  <div class="card"><strong>Campanhas</strong>
+    <table><tr><th>Campanha</th><th>Status</th><th class="n">Investimento</th><th class="n">Impressões</th><th class="n">Cliques</th></tr>
+    {% for c in r.ads.campaigns %}<tr><td>{{ c.name or '(sem nome)' }}</td><td>{{ c.status or '' }}</td><td class="n">R$ {{ '%.2f'|format(c.spend) }}</td><td class="n">{{ '{:,.0f}'.format(c.impressions).replace(',', '.') }}</td><td class="n">{{ '{:,.0f}'.format(c.link_clicks).replace(',', '.') }}</td></tr>{% endfor %}
+    </table></div>
+  <div class="card"><strong>Facebook × Instagram</strong>
+    <table><tr><th>Plataforma</th><th class="n">Investimento</th><th class="n">Impressões</th><th class="n">Cliques</th></tr>
+    {% for p in r.ads.by_platform %}<tr><td>{{ p.platform }}</td><td class="n">R$ {{ '%.2f'|format(p.spend) }}</td><td class="n">{{ '{:,.0f}'.format(p.impressions).replace(',', '.') }}</td><td class="n">{{ '{:,.0f}'.format(p.link_clicks).replace(',', '.') }}</td></tr>{% endfor %}
+    </table></div>
+</div>
+
+<div class="foot">Fontes: Instagram Graph API, Page Insights e Marketing API, coletadas diariamente pelo Report Meta. Alcance e visualizações do Instagram são orgânico + pago conforme a Meta reporta. Atribuição de anúncios: 7 dias após clique, 1 dia após visualização. Fuso: America/Campo_Grande. <a href="/api/report?start={{ r.period.start }}&end={{ r.period.end }}">JSON</a></div>
+
+<script>
+const R = {{ r|tojson }};
+const mk = (id, label, series, color) => new Chart(document.getElementById(id), {
+  type: 'line', data: { labels: series.map(p => p.day.slice(5)), datasets: [{ label, data: series.map(p => p.value), borderColor: color, backgroundColor: color + '33', fill: true, tension: .3, pointRadius: 2 }] },
+  options: { plugins: { legend: { labels: { color: '#e6edf3' } } }, scales: { x: { ticks: { color: '#8b9bab' }, grid: { color: '#243241' } }, y: { ticks: { color: '#8b9bab' }, grid: { color: '#243241' } } } }
+});
+mk('reach', 'Alcance orgânico por dia (IG)', R.instagram.reach_series, '#3ddc84');
+mk('spend', 'Investimento por dia (R$)', R.ads.spend_series, '#4ea1ff');
+</script>
+</body>
+</html>
