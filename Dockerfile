@@ -5,7 +5,6 @@ RUN apt-get update && apt-get install -y --no-install-recommends tzdata curl && 
 COPY pyproject.toml README.md ./
 COPY collector ./collector
 COPY web ./web
-COPY sql ./sql
 RUN pip install --no-cache-dir .
 EXPOSE 8000
 HEALTHCHECK --interval=30s --timeout=5s --retries=3 CMD curl -fsS http://localhost:8000/healthz || exit 1

@@ -26,7 +26,7 @@ Dashboard local: `REPORT_BASIC_PASSWORD=x uvicorn web.app:app --reload` e abra h
 | `collector/page.py` | Página (métricas pós-jun/2026, tolerante a deprecação) e posts |
 | `collector/ads.py` | Objetos (campanha/conjunto/anúncio) e insights por dia × nível × breakdown (plataforma, dispositivo, idade/gênero, hora) |
 | `collector/db.py` | Upserts idempotentes; todo fato guarda o JSON bruto em `raw` |
-| `sql/001_schema.sql` | Esquema `meta.*` |
+| `collector/sql/001_schema.sql` | Esquema `meta.*` (empacotado com o coletor; `migrate` aplica em ordem) |
 | `collector/cli.py` | `migrate`, `check`, `collect`, `backfill`, `daemon` (modo serviço) |
 | `web/app.py` | FastAPI: `/healthz`, `/api/report?start&end` (JSON), `/` dashboard (Basic Auth) |
 | `web/report.py` | Agregações do relatório com comparação ao período anterior |

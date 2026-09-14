@@ -31,7 +31,7 @@ Stacks > Add stack > nome `report` > cole `stack.yml` (ou aponte para o reposit�
 
 | Variável | Valor |
 |---|---|
-| `REPORT_DB_PASSWORD` | senha nova do Postgres do stack |
+| `REPORT_DB_PASSWORD` | senha nova do Postgres do stack (obrigatória: sem ela o `postgres:16` sai com exit 1) |
 | `REPORT_BASIC_USER` / `REPORT_BASIC_PASSWORD` | login do dashboard |
 | `META_APP_ID` | `2896813507325298` |
 | `META_BUSINESS_ID` | `187051108801754` |
@@ -40,11 +40,11 @@ Stacks > Add stack > nome `report` > cole `stack.yml` (ou aponte para o reposit�
 | `META_AD_ACCOUNT_ID` | `act_362683751` |
 | `META_APP_SECRET` | opcional (habilita `appsecret_proof`) |
 
-Antes de fazer o deploy, confira dois nomes que variam entre instalações e ajuste em `stack.yml` se preciso:
+Nomes confirmados na VPS di4e em 14/09/2026: rede pública do Traefik `di4e`, resolver `letsencryptresolver`, provider Swarm (labels em `deploy.labels`). Para outra VPS, confira:
 
 ```bash
 docker network ls | grep traefik          # nome da rede pública (stack.yml assume di4e)
-docker service inspect traefik_traefik --format '{{json .Spec.TaskTemplate.ContainerSpec.Args}}' | tr ',' '\n' | grep certresolver   # nome do resolver (stack.yml assume letsencrypt)
+docker service inspect traefik_traefik --format '{{json .Spec.TaskTemplate.ContainerSpec.Args}}' | tr ',' '\n' | grep certresolver   # nome do resolver (stack.yml usa letsencryptresolver)
 ```
 
 ## 4. Primeira carga

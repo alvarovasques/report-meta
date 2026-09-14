@@ -18,9 +18,13 @@ def conn():
 
 
 def migrate() -> None:
-    sql_dir = Path(__file__).resolve().parent.parent / "sql"
+    """Aplica os .sql de collector/sql em ordem. Idempotente (CREATE IF NOT EXISTS)."""
+    sql_dir = Path(__file__).resolve().parent / "sql"
+    files = sorted(sql_dir.glob("*.sql"))
+    if not files:
+        raise RuntimeError(f"nenhuma migração encontrada em {sql_dir}")
     with conn() as c:
-        for f in sorted(sql_dir.glob("*.sql")):
+        for f in files:
             c.execute(f.read_text(encoding="utf-8"))
         c.commit()
 

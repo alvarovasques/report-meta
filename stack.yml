@@ -52,7 +52,7 @@ services:
         traefik.docker.network: di4e
         traefik.http.routers.report.rule: Host(`report.di4e.com.br`)
         traefik.http.routers.report.entrypoints: websecure
-        traefik.http.routers.report.tls.certresolver: letsencrypt
+        traefik.http.routers.report.tls.certresolver: letsencryptresolver
         traefik.http.services.report.loadbalancer.server.port: "8000"
 
   report-collector:
