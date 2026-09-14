@@ -41,7 +41,7 @@ services:
     environment:
       <<: *env
     secrets: [meta_system_user_token]
-    networks: [report_internal, traefik-public]
+    networks: [report_internal, di4e]
     deploy:
       replicas: 1
       update_config: { order: start-first, failure_action: rollback }
@@ -49,7 +49,7 @@ services:
       labels:
         com.centurylinklabs.watchtower.enable: "true"
         traefik.enable: "true"
-        traefik.docker.network: traefik-public
+        traefik.docker.network: di4e
         traefik.http.routers.report.rule: Host(`report.di4e.com.br`)
         traefik.http.routers.report.entrypoints: websecure
         traefik.http.routers.report.tls.certresolver: letsencrypt
@@ -71,7 +71,7 @@ services:
 networks:
   report_internal:
     driver: overlay
-  traefik-public:
+  di4e:
     external: true
 
 volumes:

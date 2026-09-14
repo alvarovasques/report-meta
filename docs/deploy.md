@@ -43,7 +43,7 @@ Stacks > Add stack > nome `report` > cole `stack.yml` (ou aponte para o reposit�
 Antes de fazer o deploy, confira dois nomes que variam entre instalações e ajuste em `stack.yml` se preciso:
 
 ```bash
-docker network ls | grep traefik          # nome da rede pública (stack.yml assume traefik-public)
+docker network ls | grep traefik          # nome da rede pública (stack.yml assume di4e)
 docker service inspect traefik_traefik --format '{{json .Spec.TaskTemplate.ContainerSpec.Args}}' | tr ',' '\n' | grep certresolver   # nome do resolver (stack.yml assume letsencrypt)
 ```
 
