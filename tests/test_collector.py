@@ -99,3 +99,16 @@ def test_missing_actions_stored_as_sql_null():
     from collector import db
     assert db._jsonb_or_null(None) is None
     assert db._jsonb_or_null([]) is not None
+
+
+def test_page_insights_probes_metrics_when_error_is_generic(httpx_mock):
+    from collector import page
+    page._VALID.clear()
+    err = {"error": {"code": 100, "message": "(#100) The value must be a valid insights metric"}}
+    httpx_mock.add_response(url=f"{BASE}/p/insights?metric=page_views_total%2Cpage_fans&period=day&access_token=t", status_code=400, json=err)
+    httpx_mock.add_response(url=f"{BASE}/p/insights?metric=page_views_total&period=day&access_token=t", json={"data": [{"name": "page_views_total"}]})
+    httpx_mock.add_response(url=f"{BASE}/p/insights?metric=page_fans&period=day&access_token=t", status_code=400, json=err)
+    httpx_mock.add_response(url=f"{BASE}/p/insights?metric=page_views_total&period=day&access_token=t", json={"data": [{"name": "page_views_total"}]})
+    payload, kept = page._insights_tolerant(graph.GraphClient(token="t"), "/p/insights", ["page_views_total", "page_fans"], period="day")
+    assert kept == ["page_views_total"] and payload["data"][0]["name"] == "page_views_total"
+    assert page._VALID[("page_views_total", "page_fans")] == ["page_views_total"]

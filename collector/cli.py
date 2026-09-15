@@ -102,11 +102,20 @@ def backfill(days: int = typer.Option(395, help="Dias de histórico de Ads (máx
 @app.command()
 def daemon(hour: int = typer.Option(3, help="Hora local da coleta diária")):
     """Modo serviço (Swarm): migra o esquema, coleta se ainda não coletou hoje e dorme até a próxima hora."""
+    import signal
     import time
     from datetime import datetime
 
+    stop = {"now": False}
+
+    def _term(*_):  # docker service update manda SIGTERM; sem isso o container morre com 137 depois de 10s
+        log.info("daemon.stop")
+        stop["now"] = True
+
+    signal.signal(signal.SIGTERM, _term)
+    signal.signal(signal.SIGINT, _term)
     db.migrate()
-    while True:
+    while not stop["now"]:
         target = date.today() - timedelta(days=1)
         with db.conn() as c:
             done = c.execute(
@@ -122,7 +131,9 @@ def daemon(hour: int = typer.Option(3, help="Hora local da coleta diária")):
         nxt = now.replace(hour=hour, minute=0, second=0, microsecond=0)
         if nxt <= now:
             nxt += timedelta(days=1)
-        time.sleep(max(60, (nxt - now).total_seconds()))
+        deadline = time.monotonic() + max(60, (nxt - now).total_seconds())
+        while not stop["now"] and time.monotonic() < deadline:
+            time.sleep(5)
 
 
 if __name__ == "__main__":

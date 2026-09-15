@@ -6,6 +6,7 @@ A lista abaixo é a que restou documentada; o coletor tolera métricas inválida
 """
 from __future__ import annotations
 
+import re
 from datetime import date, datetime, timedelta, timezone
 
 import structlog
@@ -24,20 +25,46 @@ PAGE_METRICS = [
 POST_FIELDS = "id,message,permalink_url,created_time,shares,reactions.summary(true),comments.summary(true)"
 
 
+_VALID: dict[tuple[str, ...], list[str]] = {}  # cache por lista pedida: quais métricas a Meta ainda aceita
+
+
 def _insights_tolerant(g: GraphClient, path: str, metrics: list[str], **params):
-    """Chama insights; se a Meta reclamar de métrica inválida, remove-a e tenta de novo."""
-    metrics = list(metrics)
+    """Chama insights; se a Meta reclamar de métrica inválida, descobre quais sobraram e segue.
+
+    A mensagem de erro 100 nem sempre nomeia a métrica ("The value must be a valid insights
+    metric"); nesse caso testa uma a uma (só na primeira vez; o resultado fica em cache).
+    """
+    key = tuple(metrics)
+    metrics = list(_VALID.get(key, metrics))
     while metrics:
         try:
-            return g.get(path, metric=",".join(metrics), **params), metrics
+            payload = g.get(path, metric=",".join(metrics), **params)
+            _VALID[key] = metrics
+            return payload, metrics
         except GraphError as e:
-            msg = e.payload.get("error", {}).get("message", "")
-            bad = next((m for m in metrics if m in msg), None)
-            if e.payload.get("error", {}).get("code") == 100 and bad:
+            err = e.payload.get("error", {})
+            if err.get("code") != 100:
+                raise
+            msg = err.get("message", "")
+            bad = next((m for m in metrics if re.search(rf"\b{re.escape(m)}\b", msg)), None)
+            if bad:
                 log.warning("page.metric.deprecated", metric=bad)
                 metrics.remove(bad)
                 continue
-            raise
+            # erro genérico: sonda cada métrica isoladamente
+            ok: list[str] = []
+            for m in metrics:
+                try:
+                    g.get(path, metric=m, **params)
+                    ok.append(m)
+                except GraphError as e2:
+                    if e2.payload.get("error", {}).get("code") != 100:
+                        raise
+                    log.warning("page.metric.deprecated", metric=m)
+            if ok == metrics:  # nada mudou: erro não é de métrica
+                raise
+            metrics = ok
+    _VALID[key] = []
     return {"data": []}, []
 
 
