@@ -29,7 +29,9 @@ BREAKDOWN_SETS: dict[str, list[str]] = {
     "hour": ["hourly_stats_aggregated_by_advertiser_time_zone"],
 }
 # criativo do anúncio: texto, título, imagem (image_url para imagem estática; thumbnail_url para vídeo)
-CREATIVE_FIELDS = "id,name,title,body,image_url,thumbnail_url,object_story_spec,asset_feed_spec,instagram_permalink_url,effective_object_story_id"
+# asset_feed_spec fica de fora: em criativos dinâmicos é enorme e o /ads responde 500 "reduce the amount of data"
+CREATIVE_FIELDS = "id,name,title,body,image_url,thumbnail_url,object_story_spec,instagram_permalink_url,effective_object_story_id"
+ADS_PAGE_SIZE = 25
 LEVELS_BY_BREAKDOWN = {"": ["campaign", "adset", "ad"], "platform": ["campaign"], "device": ["campaign"],
                        "demo": ["campaign"], "hour": ["campaign"]}
 
@@ -65,7 +67,7 @@ def collect_objects(g: GraphClient) -> int:
         for aset in g.paginate(f"/{act}/adsets", fields="id,name,status,effective_status,campaign_id", limit=100):
             db.upsert_ad_object(c, act, "adset", aset, aset.get("campaign_id")); n += 1
         for ad in g.paginate(f"/{act}/ads", fields="id,name,status,effective_status,adset_id,campaign_id,"
-                             f"creative{{{CREATIVE_FIELDS}}}", thumbnail_width=600, thumbnail_height=600, limit=100):
+                             f"creative{{{CREATIVE_FIELDS}}}", thumbnail_width=600, thumbnail_height=600, limit=ADS_PAGE_SIZE):
             db.upsert_ad_object(c, act, "ad", ad, ad.get("adset_id")); n += 1
             cr = ad.get("creative") or {}
             db.set_ad_creative(c, ad["id"], cr)
