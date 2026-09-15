@@ -120,6 +120,11 @@ def set_ad_creative(c: psycopg.Connection, ad_id: str, creative: dict) -> None:
     c.execute("UPDATE meta.ad_object SET creative = %s WHERE id = %s", (Jsonb(creative), ad_id))
 
 
+def _jsonb_or_null(v):
+    """Jsonb(None) grava o JSON `null`, que quebra jsonb_array_elements; queremos NULL SQL."""
+    return Jsonb(v) if v is not None else None
+
+
 def insert_ads_daily(c: psycopg.Connection, ad_account_id: str, level: str, row: dict, breakdown_keys: list[str]) -> None:
     breakdown = "|".join(f"{k}={row.get(k)}" for k in breakdown_keys) if breakdown_keys else ""
     object_id = row.get(f"{level}_id")
@@ -139,7 +144,7 @@ def insert_ads_daily(c: psycopg.Connection, ad_account_id: str, level: str, row:
         (ad_account_id, level, object_id, row["date_start"], breakdown,
          row.get("spend"), row.get("impressions"), row.get("reach"), row.get("frequency"),
          row.get("clicks"), link_clicks, row.get("cpc"), row.get("cpm"), row.get("ctr"),
-         Jsonb(row.get("actions")), Jsonb(row.get("cost_per_action_type")), Jsonb(row)),
+         _jsonb_or_null(row.get("actions")), _jsonb_or_null(row.get("cost_per_action_type")), Jsonb(row)),
     )
 
 

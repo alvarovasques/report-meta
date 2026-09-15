@@ -93,3 +93,9 @@ def test_dashboard_renders_with_empty_report():
          "facebook": {"current": {}, "previous": {}, "followers": None}, "ads": empty_ads, "ads_previous": empty_ads, "last_collect": None}
     html = env.get_template("dashboard.html").render(r=r)
     assert "/img/ig:m1" in html and "/img/ad:1" in html and "Top 5 anúncios" in html and "Sem reels" in html
+
+
+def test_missing_actions_stored_as_sql_null():
+    from collector import db
+    assert db._jsonb_or_null(None) is None
+    assert db._jsonb_or_null([]) is not None

@@ -69,7 +69,7 @@ def _top_ads(c, act: str, start: date, end: date, limit: int = 5) -> list[dict[s
         """WITH agg AS (
              SELECT d.object_id, SUM(d.spend) spend, SUM(d.impressions) impressions, SUM(d.reach) reach,
                     SUM(d.link_clicks) link_clicks,
-                    COALESCE(SUM((SELECT SUM((a->>'value')::numeric) FROM jsonb_array_elements(d.actions) a
+                    COALESCE(SUM((SELECT SUM((a->>'value')::numeric) FROM jsonb_array_elements((CASE WHEN jsonb_typeof(d.actions)='array' THEN d.actions ELSE '[]'::jsonb END)) a
                                   WHERE a->>'action_type' = ANY(%s))), 0) results
              FROM meta.ads_daily d
              WHERE d.ad_account_id=%s AND d.level='ad' AND d.breakdown='' AND d.day BETWEEN %s AND %s
@@ -110,7 +110,7 @@ def _ads(c, act: str, start: date, end: date) -> dict[str, Any]:
     # resultados: leads + conversas iniciadas (action_types mais comuns para ISP)
     res = c.execute(
         """SELECT a->>'action_type', SUM((a->>'value')::numeric)
-           FROM meta.ads_daily d, jsonb_array_elements(d.actions) a
+           FROM meta.ads_daily d, jsonb_array_elements((CASE WHEN jsonb_typeof(d.actions)='array' THEN d.actions ELSE '[]'::jsonb END)) a
            WHERE d.ad_account_id=%s AND d.level='campaign' AND d.breakdown='' AND d.day BETWEEN %s AND %s
              AND a->>'action_type' IN ('lead','onsite_conversion.messaging_conversation_started_7d','onsite_conversion.lead_grouped','link_click')
            GROUP BY 1""",
