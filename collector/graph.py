@@ -38,11 +38,18 @@ class GraphClient:
         self.http = httpx.Client(base_url=settings.graph_base, timeout=timeout)
 
     def _auth(self, params: dict[str, Any]) -> dict[str, Any]:
-        params = {**params, "access_token": self.token}
+        token = params.pop("access_token", None) or self.token  # permite token de Página por chamada
+        params = {**params, "access_token": token}
         if settings.meta_app_secret:
-            proof = hmac.new(settings.meta_app_secret.encode(), self.token.encode(), hashlib.sha256).hexdigest()
+            proof = hmac.new(settings.meta_app_secret.encode(), token.encode(), hashlib.sha256).hexdigest()
             params["appsecret_proof"] = proof
         return params
+
+    def with_token(self, token: str) -> "GraphClient":
+        """Cliente irmão com outro token (ex.: Page access token), mesma sessão HTTP."""
+        c = GraphClient.__new__(GraphClient)
+        c.token, c.http = token, self.http
+        return c
 
     @retry(
         reraise=True,

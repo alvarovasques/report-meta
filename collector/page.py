@@ -25,6 +25,23 @@ PAGE_METRICS = [
 POST_FIELDS = "id,message,permalink_url,created_time,shares,reactions.summary(true),comments.summary(true)"
 
 
+_PAGE_TOKENS: dict[str, str] = {}
+
+
+def page_client(g: GraphClient) -> GraphClient:
+    """Edges de Página (/posts, /insights, /{post}/insights) exigem Page access token,
+    não o token do System User (erro 190 sub 2069032). Obtém via /{page}?fields=access_token e cacheia."""
+    page = settings.meta_page_id
+    if page not in _PAGE_TOKENS:
+        info = g.get(f"/{page}", fields="access_token")
+        tok = info.get("access_token")
+        if not tok:
+            log.warning("page.token.missing", msg="System User sem permissão de Página; usando token de usuário")
+            return g
+        _PAGE_TOKENS[page] = tok
+    return g.with_token(_PAGE_TOKENS[page])
+
+
 _VALID: dict[tuple[str, ...], list[str]] = {}  # cache por lista pedida: quais métricas a Meta ainda aceita
 
 
@@ -70,6 +87,7 @@ def _insights_tolerant(g: GraphClient, path: str, metrics: list[str], **params):
 
 def collect_page(g: GraphClient, day: date) -> int:
     page = settings.meta_page_id
+    g = page_client(g)
     start = datetime(day.year, day.month, day.day, tzinfo=timezone.utc)
     since, until = int(start.timestamp()), int((start + timedelta(days=1)).timestamp())
     rows: list[tuple] = []
@@ -98,6 +116,7 @@ def collect_page(g: GraphClient, day: date) -> int:
 
 def collect_posts(g: GraphClient, day: date, lookback_days: int = 30) -> int:
     page = settings.meta_page_id
+    g = page_client(g)
     cutoff = datetime.now(timezone.utc) - timedelta(days=lookback_days)
     n = 0
     with db.conn() as c:

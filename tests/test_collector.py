@@ -112,3 +112,13 @@ def test_page_insights_probes_metrics_when_error_is_generic(httpx_mock):
     payload, kept = page._insights_tolerant(graph.GraphClient(token="t"), "/p/insights", ["page_views_total", "page_fans"], period="day")
     assert kept == ["page_views_total"] and payload["data"][0]["name"] == "page_views_total"
     assert page._VALID[("page_views_total", "page_fans")] == ["page_views_total"]
+
+
+def test_page_client_uses_page_access_token(httpx_mock):
+    from collector import page
+    page._PAGE_TOKENS.clear()
+    httpx_mock.add_response(url=f"{BASE}/p?fields=access_token&access_token=t", json={"access_token": "PAGE_TOKEN"})
+    httpx_mock.add_response(url=f"{BASE}/p/posts?limit=1&access_token=PAGE_TOKEN", json={"data": []})
+    pg = page.page_client(graph.GraphClient(token="t"))
+    assert pg.token == "PAGE_TOKEN"
+    assert list(pg.paginate("/p/posts", limit=1)) == []
