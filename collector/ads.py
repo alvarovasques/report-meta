@@ -11,7 +11,7 @@ import structlog
 
 from . import db, images
 from .config import settings
-from .graph import GraphClient
+from .graph import GraphClient, GraphError
 
 log = structlog.get_logger(__name__)
 
@@ -70,6 +70,14 @@ def collect_objects(g: GraphClient) -> int:
                              f"creative{{{CREATIVE_FIELDS}}}", thumbnail_width=600, thumbnail_height=600, limit=ADS_PAGE_SIZE):
             db.upsert_ad_object(c, act, "ad", ad, ad.get("adset_id")); n += 1
             cr = ad.get("creative") or {}
+            if not cr.get("image_url") and cr.get("id"):
+                # vídeo: o thumbnail_url expandido no /ads vem em 64px; o nó do criativo aceita tamanho
+                try:
+                    big = g.get(f"/{cr['id']}", fields="thumbnail_url", thumbnail_width=600, thumbnail_height=600)
+                    if big.get("thumbnail_url"):
+                        cr["thumbnail_url"] = big["thumbnail_url"]
+                except GraphError as e:
+                    log.warning("ads.creative.thumb.skip", ad=ad["id"], err=str(e))
             db.set_ad_creative(c, ad["id"], cr)
             images.cache(c, f"ad:{ad['id']}", creative_image_url(cr))
         c.commit()

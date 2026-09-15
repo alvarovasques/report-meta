@@ -37,9 +37,12 @@ def _shrink(data: bytes, content_type: str) -> tuple[bytes, str]:
         return data, content_type
 
 
+MIN_GOOD_BYTES = 4000   # abaixo disso é thumbnail de 64px; vale buscar de novo
+
+
 def has_fresh(c: psycopg.Connection, key: str) -> bool:
-    r = c.execute("SELECT fetched_at FROM meta.image_cache WHERE key=%s AND bytes IS NOT NULL", (key,)).fetchone()
-    return bool(r) and r[0] > datetime.now(timezone.utc) - REFRESH_AFTER
+    r = c.execute("SELECT fetched_at, length(bytes) FROM meta.image_cache WHERE key=%s AND bytes IS NOT NULL", (key,)).fetchone()
+    return bool(r) and r[0] > datetime.now(timezone.utc) - REFRESH_AFTER and (r[1] or 0) >= MIN_GOOD_BYTES
 
 
 def cache(c: psycopg.Connection, key: str, url: str | None, force: bool = False) -> bool:
