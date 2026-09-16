@@ -58,6 +58,27 @@ def _top_media(c, ig: str, start: date, end: date, product: str, limit: int = 5)
              "reach": r[4], "views": r[5], "interactions": r[6]} for r in rows]
 
 
+def _top_stories(c, ig: str, start: date, end: date, limit: int = 5) -> list[dict[str, Any]]:
+    rows = c.execute(
+        """WITH last AS (
+             SELECT DISTINCT ON (media_id, metric) media_id, metric, value
+             FROM meta.media_snapshot ORDER BY media_id, metric, snapshot_day DESC)
+           SELECT m.id, m.permalink, m.timestamp, m.caption,
+                  MAX(CASE WHEN l.metric='reach' THEN l.value END) reach,
+                  MAX(CASE WHEN l.metric='views' THEN l.value END) views,
+                  MAX(CASE WHEN l.metric='replies' THEN l.value END) replies,
+                  MAX(CASE WHEN l.metric='navigation_exit' THEN l.value END) exits,
+                  MAX(CASE WHEN l.metric='navigation_tap_forward' THEN l.value END) taps_forward
+           FROM meta.ig_media m JOIN last l ON l.media_id=m.id
+           WHERE m.ig_user_id=%s AND m.product_type='STORY' AND m.timestamp::date BETWEEN %s AND %s
+           GROUP BY m.id ORDER BY reach DESC NULLS LAST LIMIT %s""",
+        (ig, start, end, limit),
+    ).fetchall()
+    return [{"id": r[0], "permalink": r[1], "date": r[2].date().isoformat(), "caption": (r[3] or "")[:300],
+             "image": f"/img/ig:{r[0]}", "reach": r[4], "views": r[5], "replies": r[6], "exits": r[7],
+             "taps_forward": r[8]} for r in rows]
+
+
 RESULT_ACTIONS = ("lead", "onsite_conversion.lead_grouped", "onsite_conversion.messaging_conversation_started_7d")
 
 
@@ -121,11 +142,14 @@ def _ads(c, act: str, start: date, end: date) -> dict[str, Any]:
     convs = actions.get("onsite_conversion.messaging_conversation_started_7d", 0)
     results = leads + convs
     camps = c.execute(
-        """SELECT o.name, o.status, SUM(d.spend), SUM(d.impressions), SUM(d.link_clicks)
+        """SELECT o.name, o.status, o.objective, SUM(d.spend), SUM(d.impressions), SUM(d.link_clicks),
+                  COALESCE(SUM((SELECT SUM((a->>'value')::numeric)
+                                FROM jsonb_array_elements((CASE WHEN jsonb_typeof(d.actions)='array' THEN d.actions ELSE '[]'::jsonb END)) a
+                                WHERE a->>'action_type' = ANY(%s))), 0) results
            FROM meta.ads_daily d LEFT JOIN meta.ad_object o ON o.id=d.object_id
            WHERE d.ad_account_id=%s AND d.level='campaign' AND d.breakdown='' AND d.day BETWEEN %s AND %s
-           GROUP BY o.name, o.status ORDER BY SUM(d.spend) DESC NULLS LAST LIMIT 15""",
-        (act, start, end),
+           GROUP BY o.name, o.status, o.objective ORDER BY SUM(d.spend) DESC NULLS LAST LIMIT 15""",
+        (list(RESULT_ACTIONS), act, start, end),
     ).fetchall()
     plat = c.execute(
         """SELECT split_part(breakdown,'|',1), SUM(spend), SUM(impressions), SUM(link_clicks)
@@ -139,8 +163,10 @@ def _ads(c, act: str, start: date, end: date) -> dict[str, Any]:
         "cpm": (spend / impr * 1000) if impr else None,
         "leads": leads, "conversations": convs, "results": results,
         "cost_per_result": (spend / results) if results else None,
-        "campaigns": [{"name": n, "status": s, "spend": float(sp or 0), "impressions": float(im or 0),
-                       "link_clicks": float(lc or 0)} for n, s, sp, im, lc in camps],
+        "campaigns": [{"name": n, "status": s, "objective": ob, "spend": float(sp or 0), "impressions": float(im or 0),
+                       "link_clicks": float(lc or 0), "results": float(rs or 0),
+                       "cost_per_result": (float(sp or 0) / float(rs)) if rs else None}
+                      for n, s, ob, sp, im, lc, rs in camps],
         "by_platform": [{"platform": p.replace("publisher_platform=", ""), "spend": float(sp or 0),
                          "impressions": float(im or 0), "link_clicks": float(lc or 0)} for p, sp, im, lc in plat],
         "top_ads": _top_ads(c, act, start, end),
@@ -187,6 +213,8 @@ def build(start: date, end: date) -> dict[str, Any]:
                 "reach_series": _series(c, ig, "reach", start, end),
                 "top_posts": _top_media(c, ig, start, end, "FEED"),
                 "top_reels": _top_media(c, ig, start, end, "REELS"),
+                "top_stories": _top_stories(c, ig, start, end),
+                "stories_count": sum(v for k, v in posts if k == "STORY"),
             },
             "facebook": {"current": cur_pg, "previous": prev_pg,
                          "followers": _last_snapshot(c, page, "followers_count_snapshot", end)},

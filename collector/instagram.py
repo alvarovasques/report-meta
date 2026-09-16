@@ -41,8 +41,9 @@ def _day_bounds(day: date) -> tuple[int, int]:
     return int(start.timestamp()), int((start + timedelta(days=1)).timestamp())
 
 
-def collect_account(g: GraphClient, day: date) -> int:
-    """Métricas de conta do dia (total_value) + follower_count (time_series)."""
+def collect_account(g: GraphClient, day: date, profile: bool = True) -> int:
+    """Métricas de conta do dia (total_value) + follower_count (time_series).
+    profile=False (backfill) pula follower_count e o snapshot do perfil, que só valem para hoje."""
     ig = settings.meta_ig_user_id
     since, until = _day_bounds(day)
     rows: list[tuple] = []
@@ -57,6 +58,12 @@ def collect_account(g: GraphClient, day: date) -> int:
             for r in bd.get("results", []):
                 key = "|".join(f"{d}={v}" for d, v in zip(dims, r.get("dimension_values", [])))
                 rows.append((ig, day.isoformat(), m["name"], key, r.get("value"), r))
+
+    if not profile:
+        with db.conn() as c:
+            n = db.insert_account_daily(c, rows)
+            c.commit()
+        return n
 
     # follower_count é time_series e só existe para os últimos 30 dias
     try:
@@ -132,11 +139,18 @@ def collect_media(g: GraphClient, day: date, lookback_days: int = 30, full_backf
             db.upsert_ig_media(c, ig, m)
             images.cache(c, f"ig:{m['id']}", _image_url(m))
             if full_backfill or ts >= cutoff:
-                metrics = _media_insights(g, m["id"], m.get("media_product_type", "FEED"))
+                try:
+                    metrics = _media_insights(g, m["id"], m.get("media_product_type", "FEED"))
+                except GraphError as e:
+                    # mídias anteriores à conta comercial (ou com insights indisponíveis) não podem derrubar o job
+                    log.warning("ig.media.insights.skip", media_id=m["id"], err=str(e))
+                    metrics = {}
                 metrics["like_count"] = m.get("like_count")
                 metrics["comments_count"] = m.get("comments_count")
                 db.insert_media_snapshot(c, m["id"], day.isoformat(), metrics)
                 n += 1
+                if n % 50 == 0:
+                    c.commit()
             elif not full_backfill:
                 break  # a listagem vem em ordem decrescente de data
         c.commit()
@@ -152,7 +166,11 @@ def collect_stories(g: GraphClient, day: date) -> int:
             s.setdefault("media_product_type", "STORY")
             db.upsert_ig_media(c, ig, s)
             images.cache(c, f"ig:{s['id']}", _image_url(s))
-            metrics = _media_insights(g, s["id"], "STORY")
+            try:
+                metrics = _media_insights(g, s["id"], "STORY")
+            except GraphError as e:
+                log.warning("ig.story.insights.skip", media_id=s["id"], err=str(e))
+                metrics = {}
             db.insert_media_snapshot(c, s["id"], day.isoformat(), metrics)
             n += 1
         c.commit()

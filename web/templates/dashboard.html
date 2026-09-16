@@ -59,7 +59,7 @@
   {{ kpi('Alcance orgânico (IG)', r.instagram.current.reach, r.instagram.previous.reach) }}
   {{ kpi('Alcance pago', r.ads.reach, r.ads_previous.reach) }}
   {{ kpi('Investimento em anúncios', r.ads.spend, r.ads_previous.spend, 'brl', true) }}
-  {{ kpi('Resultados (leads + conversas)', r.ads.results, r.ads_previous.results) }}
+  {{ kpi('Resultados (conversas WhatsApp + leads)', r.ads.results, r.ads_previous.results) }}
   {{ kpi('Custo por resultado', r.ads.cost_per_result, r.ads_previous.cost_per_result, 'brl', true) }}
   {{ kpi('Seguidores IG', r.instagram.followers, r.instagram.followers_prev) }}
 </div>
@@ -96,6 +96,19 @@
 {{ media_cards(r.instagram.top_posts, 'posts') }}
 <h2>Top 5 reels</h2>
 {{ media_cards(r.instagram.top_reels, 'reels') }}
+<h2>Top 5 stories{% if r.instagram.stories_count %} · {{ r.instagram.stories_count }} publicados no período{% endif %}</h2>
+<div class="cards">
+  {% for p in r.instagram.top_stories %}
+  <a class="mcard" href="{{ p.permalink }}" target="_blank" rel="noopener">
+    <div class="thumb" style="background-image:url('{{ p.image }}')"><span class="rank">#{{ loop.index }}</span></div>
+    <div class="meta">
+      <div class="cap">{{ p.caption or 'Story de ' ~ p.date }}</div>
+      <div class="stats"><span><b>{{ fmt(p.reach) }}</b> alcance</span><span><b>{{ fmt(p.views) }}</b> views</span><span><b>{{ fmt(p.replies) }}</b> respostas</span><span><b>{{ fmt(p.exits) }}</b> saídas</span></div>
+      <div class="date">{{ p.date }}</div>
+    </div>
+  </a>
+  {% else %}<div class="empty">Sem stories coletados no período (a API só expõe stories por 24h; a coleta diária guarda os do dia).</div>{% endfor %}
+</div>
 
 <h2>Facebook</h2>
 <div class="grid">
@@ -113,7 +126,7 @@
   {{ kpi('CPC', r.ads.cpc, r.ads_previous.cpc, 'brl', true) }}
   {{ kpi('CPM', r.ads.cpm, r.ads_previous.cpm, 'brl', true) }}
   {{ kpi('Leads', r.ads.leads, r.ads_previous.leads) }}
-  {{ kpi('Conversas iniciadas', r.ads.conversations, r.ads_previous.conversations) }}
+  {{ kpi('Conversas iniciadas (WhatsApp/Messenger)', r.ads.conversations, r.ads_previous.conversations) }}
 </div>
 <h2>Top 5 anúncios</h2>
 <div class="cards">
@@ -131,8 +144,8 @@
 </div>
 <div class="charts" style="margin-top:12px">
   <div class="card"><strong>Campanhas</strong>
-    <table><tr><th>Campanha</th><th>Status</th><th class="n">Investimento</th><th class="n">Impressões</th><th class="n">Cliques</th></tr>
-    {% for c in r.ads.campaigns %}<tr><td>{{ c.name or '(sem nome)' }}</td><td>{{ c.status or '' }}</td><td class="n">R$ {{ '%.2f'|format(c.spend) }}</td><td class="n">{{ '{:,.0f}'.format(c.impressions).replace(',', '.') }}</td><td class="n">{{ '{:,.0f}'.format(c.link_clicks).replace(',', '.') }}</td></tr>{% endfor %}
+    <table><tr><th>Campanha</th><th>Status</th><th class="n">Investimento</th><th class="n">Impressões</th><th class="n">Cliques</th><th class="n">Resultados</th><th class="n">Custo/result.</th></tr>
+    {% for c in r.ads.campaigns %}<tr><td>{{ c.name or '(sem nome)' }}</td><td>{{ c.status or '' }}</td><td class="n">{{ brl(c.spend) }}</td><td class="n">{{ fmt(c.impressions) }}</td><td class="n">{{ fmt(c.link_clicks) }}</td><td class="n">{{ fmt(c.results) }}</td><td class="n">{{ brl(c.cost_per_result) }}</td></tr>{% endfor %}
     </table></div>
   <div class="card"><strong>Facebook × Instagram</strong>
     <table><tr><th>Plataforma</th><th class="n">Investimento</th><th class="n">Impressões</th><th class="n">Cliques</th></tr>

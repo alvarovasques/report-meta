@@ -89,7 +89,7 @@ def test_dashboard_renders_with_empty_report():
          "instagram": {"followers": None, "followers_prev": None, "followers_delta": None, "current": {}, "previous": {},
                        "engagement_rate": None, "posts_by_type": {}, "reach_series": [],
                        "top_posts": [{"id": "m1", "permalink": "#", "date": "2026-09-02", "caption": "legenda", "caption_short": "legenda",
-                                      "image": "/img/ig:m1", "reach": 10, "views": 20, "interactions": 3}], "top_reels": []},
+                                      "image": "/img/ig:m1", "reach": 10, "views": 20, "interactions": 3}], "top_reels": [], "top_stories": [], "stories_count": 0},
          "facebook": {"current": {}, "previous": {}, "followers": None}, "ads": empty_ads, "ads_previous": empty_ads, "last_collect": None}
     html = env.get_template("dashboard.html").render(r=r)
     assert "/img/ig:m1" in html and "/img/ad:1" in html and "Top 5 anúncios" in html and "Sem reels" in html

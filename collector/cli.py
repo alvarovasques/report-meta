@@ -99,6 +99,46 @@ def backfill(days: int = typer.Option(395, help="Dias de histórico de Ads (máx
     _run("ig_account", today, lambda: instagram.collect_account(g, today - timedelta(days=1)))
 
 
+def _ig_backfill(g: GraphClient, days: int) -> int:
+    """Métricas diárias de conta do IG para os últimos N dias (1 chamada por dia; a API guarda ~2 anos)."""
+    import time
+    today = date.today()
+    n = 0
+    for d in range(1, days + 1):
+        t = today - timedelta(days=d)
+        try:
+            n += instagram.collect_account(g, t, profile=False)
+        except Exception as e:  # noqa: BLE001
+            log.warning("ig.backfill.skip", day=t.isoformat(), err=str(e))
+        time.sleep(1)  # 200 chamadas/h por conta IG
+    return n
+
+
+@app.command("backfill-ig")
+def backfill_ig(days: int = typer.Option(90, help="Dias de histórico de métricas de conta do IG")):
+    """Backfill das métricas diárias de conta do Instagram (alcance, views, interações...)."""
+    g = GraphClient()
+    _run("ig_account_backfill", date.today(), lambda: _ig_backfill(g, days))
+
+
+def _needs_media_backfill(min_age_days: int = 60) -> bool:
+    """Se a mídia mais antiga no banco tem menos de N dias, o backfill completo de mídias nunca terminou."""
+    with db.conn() as c:
+        r = c.execute("SELECT MIN(timestamp) FROM meta.ig_media WHERE ig_user_id=%s AND product_type <> 'STORY'",
+                      (settings.meta_ig_user_id,)).fetchone()
+    oldest = r[0] if r else None
+    return oldest is None or oldest.date() > date.today() - timedelta(days=min_age_days)
+
+
+def _needs_ig_backfill(min_days: int = 30) -> bool:
+    with db.conn() as c:
+        r = c.execute(
+            "SELECT COUNT(DISTINCT day) FROM meta.account_daily WHERE account_id=%s AND metric='reach' AND breakdown=''",
+            (settings.meta_ig_user_id,),
+        ).fetchone()
+    return (r[0] if r else 0) < min_days
+
+
 @app.command()
 def daemon(hour: int = typer.Option(3, help="Hora local da coleta diária")):
     """Modo serviço (Swarm): migra o esquema, coleta se ainda não coletou hoje e dorme até a próxima hora."""
@@ -115,6 +155,15 @@ def daemon(hour: int = typer.Option(3, help="Hora local da coleta diária")):
     signal.signal(signal.SIGTERM, _term)
     signal.signal(signal.SIGINT, _term)
     db.migrate()
+    # primeira subida (ou banco novo): completa o histórico sem precisar de console
+    try:
+        if _needs_media_backfill():
+            g = GraphClient()
+            _run("ig_media_full", date.today(), lambda: instagram.collect_media(g, date.today(), full_backfill=True))
+        if _needs_ig_backfill():
+            backfill_ig(days=90)
+    except Exception as e:  # noqa: BLE001
+        log.error("daemon.startup_backfill.error", err=str(e))
     while not stop["now"]:
         target = date.today() - timedelta(days=1)
         with db.conn() as c:
