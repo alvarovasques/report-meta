@@ -38,10 +38,18 @@ services:
 
   report-web:
     image: *image
+    labels:  # label de CONTAINER: é esta que o Watchtower lê (deploy.labels é label de serviço)
+      com.centurylinklabs.watchtower.enable: "true"
     environment:
       <<: *env
     secrets: [meta_system_user_token]
     networks: [report_internal, di4e]
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:8000/healthz"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
     deploy:
       replicas: 1
       update_config: { order: start-first, failure_action: rollback }
@@ -57,11 +65,15 @@ services:
 
   report-collector:
     image: *image
+    labels:
+      com.centurylinklabs.watchtower.enable: "true"
     environment:
       <<: *env
     secrets: [meta_system_user_token]
     networks: [report_internal]
     command: ["report-meta", "daemon"]
+    healthcheck:
+      disable: true   # não expõe HTTP; sem isso o Swarm mata o daemon como "unhealthy"
     deploy:
       replicas: 1
       restart_policy: { condition: on-failure, delay: 60s }
