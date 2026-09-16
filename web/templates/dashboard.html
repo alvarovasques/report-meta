@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Report Meta · Internet Mais</title>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.4/chart.umd.min.js"></script>
+<script src="/static/chart.umd.js"></script>
 <style>
   :root{--bg:#0f1720;--card:#16212c;--ink:#e6edf3;--muted:#8b9bab;--green:#2ecc71;--red:#ff6b6b;--accent:#3ddc84;--line:#243241}
   *{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--ink);font:14px/1.45 system-ui,Segoe UI,Roboto,sans-serif;padding:20px 16px}
@@ -148,8 +148,8 @@
     {% for c in r.ads.campaigns %}<tr><td>{{ c.name or '(sem nome)' }}</td><td>{{ c.status or '' }}</td><td class="n">{{ brl(c.spend) }}</td><td class="n">{{ fmt(c.impressions) }}</td><td class="n">{{ fmt(c.link_clicks) }}</td><td class="n">{{ fmt(c.results) }}</td><td class="n">{{ brl(c.cost_per_result) }}</td></tr>{% endfor %}
     </table></div>
   <div class="card"><strong>Facebook × Instagram</strong>
-    <table><tr><th>Plataforma</th><th class="n">Investimento</th><th class="n">Impressões</th><th class="n">Cliques</th></tr>
-    {% for p in r.ads.by_platform %}<tr><td>{{ p.platform }}</td><td class="n">R$ {{ '%.2f'|format(p.spend) }}</td><td class="n">{{ '{:,.0f}'.format(p.impressions).replace(',', '.') }}</td><td class="n">{{ '{:,.0f}'.format(p.link_clicks).replace(',', '.') }}</td></tr>{% endfor %}
+    <table><tr><th>Plataforma</th><th class="n">Investimento</th><th class="n">Impressões</th><th class="n">Cliques</th><th class="n">Resultados</th><th class="n">Custo/result.</th></tr>
+    {% for p in r.ads.by_platform %}<tr><td>{{ p.platform }}</td><td class="n">{{ brl(p.spend) }}</td><td class="n">{{ fmt(p.impressions) }}</td><td class="n">{{ fmt(p.link_clicks) }}</td><td class="n">{{ fmt(p.results) }}</td><td class="n">{{ brl(p.cost_per_result) }}</td></tr>{% endfor %}
     </table></div>
 </div>
 

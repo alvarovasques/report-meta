@@ -8,6 +8,7 @@ from pathlib import Path
 from fastapi import Depends, FastAPI, HTTPException, Query, Request, status
 from fastapi.responses import HTMLResponse, JSONResponse, Response
 from fastapi.security import HTTPBasic, HTTPBasicCredentials
+from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
 from collector import db
@@ -15,6 +16,7 @@ from web import report as report_builder
 
 app = FastAPI(title="Report Meta", version="0.2.0", docs_url=None, redoc_url=None)
 templates = Jinja2Templates(directory=str(Path(__file__).parent / "templates"))
+app.mount("/static", StaticFiles(directory=str(Path(__file__).parent / "static")), name="static")  # Chart.js local: CDN bloqueada em redes corporativas
 basic = HTTPBasic()
 
 

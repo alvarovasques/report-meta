@@ -152,10 +152,13 @@ def _ads(c, act: str, start: date, end: date) -> dict[str, Any]:
         (list(RESULT_ACTIONS), act, start, end),
     ).fetchall()
     plat = c.execute(
-        """SELECT split_part(breakdown,'|',1), SUM(spend), SUM(impressions), SUM(link_clicks)
-           FROM meta.ads_daily WHERE ad_account_id=%s AND level='campaign' AND breakdown LIKE 'publisher_platform=%%'
-             AND day BETWEEN %s AND %s GROUP BY 1 ORDER BY 2 DESC""",
-        (act, start, end),
+        """SELECT split_part(d.breakdown,'|',1), SUM(d.spend), SUM(d.impressions), SUM(d.link_clicks),
+                  COALESCE(SUM((SELECT SUM((a->>'value')::numeric)
+                                FROM jsonb_array_elements((CASE WHEN jsonb_typeof(d.actions)='array' THEN d.actions ELSE '[]'::jsonb END)) a
+                                WHERE a->>'action_type' = ANY(%s))), 0)
+           FROM meta.ads_daily d WHERE d.ad_account_id=%s AND d.level='campaign' AND d.breakdown LIKE 'publisher_platform=%%'
+             AND d.day BETWEEN %s AND %s GROUP BY 1 ORDER BY 2 DESC""",
+        (list(RESULT_ACTIONS), act, start, end),
     ).fetchall()
     return {
         "spend": spend, "impressions": impr, "reach": reach, "clicks": clicks, "link_clicks": link,
@@ -168,7 +171,8 @@ def _ads(c, act: str, start: date, end: date) -> dict[str, Any]:
                        "cost_per_result": (float(sp or 0) / float(rs)) if rs else None}
                       for n, s, ob, sp, im, lc, rs in camps],
         "by_platform": [{"platform": p.replace("publisher_platform=", ""), "spend": float(sp or 0),
-                         "impressions": float(im or 0), "link_clicks": float(lc or 0)} for p, sp, im, lc in plat],
+                         "impressions": float(im or 0), "link_clicks": float(lc or 0), "results": float(rs or 0),
+                         "cost_per_result": (float(sp or 0) / float(rs)) if rs else None} for p, sp, im, lc, rs in plat],
         "top_ads": _top_ads(c, act, start, end),
         "spend_series": [{"day": d.isoformat(), "value": float(v or 0)} for d, v in c.execute(
             "SELECT day, SUM(spend) FROM meta.ads_daily WHERE ad_account_id=%s AND level='campaign' AND breakdown='' AND day BETWEEN %s AND %s GROUP BY day ORDER BY day",

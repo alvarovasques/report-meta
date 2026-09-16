@@ -30,5 +30,5 @@ packages = ["collector", "web"]
 include-package-data = true
 
 [tool.setuptools.package-data]
-web = ["templates/*.html"]
+web = ["templates/*.html", "static/*"]
 collector = ["sql/*.sql"]
